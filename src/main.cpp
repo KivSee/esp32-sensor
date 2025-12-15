@@ -2,13 +2,11 @@
 #include <WiFi.h>
 #include <secrets.h>
 
-// #include <ESPmDNS.h>
-// #include <WiFiUdp.h>
-// #include <ArduinoOTA.h>
 #include <SPIFFS.h>
 #include <fs_manager.h>
 #include <mqtt_manager.h>
 #include <ArduinoOTA.h>
+#include <ArduinoJson.h>
 
 #define MAX_THING_NAME_LENGTH 16
 char thing_name[MAX_THING_NAME_LENGTH];
@@ -113,6 +111,16 @@ void setup() {
     // init wifi and send startup message
     ConnectToWifi();
     mqttManager.begin(MQTT_BROKER_IP, MQTT_BROKER_PORT, thing_name);
+
+    // Set Last Will and Testament - send value 0 if device dies
+    JsonDocument lwtDoc;
+    lwtDoc["sensor"] = thing_name;
+    lwtDoc["value"] = 0;
+    lwtDoc["timestamp"] = 0;
+    char lwtMessage[256];
+    serializeJson(lwtDoc, lwtMessage);
+    mqttManager.setLastWill(MQTT_TOPIC_SENSORS, lwtMessage, 0, true);
+
     if (mqttManager.connect())
     {
         Serial.println("connected to MQTT broker");
@@ -129,6 +137,8 @@ void setup() {
 }
 
 void loop() {
+    ConnectToWifi();
+
     // maintain MQTT connection
     mqttManager.loop();
 

@@ -7,6 +7,10 @@ MQTTManager::MQTTManager() : mqttClient(wifiClient) {
     _clientId = nullptr;
     _username = nullptr;
     _password = nullptr;
+    _lwt_topic = nullptr;
+    _lwt_message = nullptr;
+    _lwt_qos = 0;
+    _lwt_retain = false;
 }
 
 bool MQTTManager::begin(const char* broker, uint16_t port, const char* clientId) {
@@ -35,10 +39,23 @@ bool MQTTManager::connect(const char* username, const char* password) {
     Serial.printf("Connecting to MQTT broker %s:%d...\n", _broker, _port);
 
     bool connected = false;
-    if (_username != nullptr && _password != nullptr) {
-        connected = mqttClient.connect(_clientId, _username, _password);
+
+    // Connect with or without credentials and Last Will
+    if (_lwt_topic != nullptr && _lwt_message != nullptr) {
+        // Connect with Last Will and Testament
+        if (_username != nullptr && _password != nullptr) {
+            connected = mqttClient.connect(_clientId, _username, _password,
+                                          _lwt_topic, _lwt_qos, _lwt_retain, _lwt_message);
+        } else {
+            connected = mqttClient.connect(_clientId, _lwt_topic, _lwt_qos, _lwt_retain, _lwt_message);
+        }
     } else {
-        connected = mqttClient.connect(_clientId);
+        // Connect without Last Will
+        if (_username != nullptr && _password != nullptr) {
+            connected = mqttClient.connect(_clientId, _username, _password);
+        } else {
+            connected = mqttClient.connect(_clientId);
+        }
     }
 
     if (connected) {
@@ -147,4 +164,13 @@ bool MQTTManager::subscribe(const char* topic) {
     }
 
     return subscribed;
+}
+
+void MQTTManager::setLastWill(const char* topic, const char* message, uint8_t qos, bool retain) {
+    _lwt_topic = topic;
+    _lwt_message = message;
+    _lwt_qos = qos;
+    _lwt_retain = retain;
+
+    Serial.printf("Last Will set: topic=%s, message=%s\n", topic, message);
 }

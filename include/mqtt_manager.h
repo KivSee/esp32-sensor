@@ -44,6 +44,9 @@ public:
     // Subscribe to a topic
     bool subscribe(const char* topic);
 
+    // Set Last Will and Testament (message sent when client disconnects unexpectedly)
+    void setLastWill(const char* topic, const char* message, uint8_t qos = 0, bool retain = false);
+
 private:
     WiFiClient wifiClient;
     PubSubClient mqttClient;
@@ -52,6 +55,12 @@ private:
     const char* _clientId;
     const char* _username;
     const char* _password;
+
+    // Last Will and Testament
+    const char* _lwt_topic;
+    const char* _lwt_message;
+    uint8_t _lwt_qos;
+    bool _lwt_retain;
 };
 
 #endif // MQTT_MANAGER_H
