@@ -1,7 +1,7 @@
 @ECHO OFF
 ECHO programming motion1 object
-pio run --target upload -e default --upload-port 10.0.1.63
+pio run --target upload -e default --upload-port motion1.local
 ECHO programming motion2 object
-pio run --target upload -e default --upload-port 10.0.1.170
+pio run --target upload -e default --upload-port motion2.local
 ECHO programming motion3 object
-pio run --target upload -e default --upload-port 10.0.1.73
+pio run --target upload -e default --upload-port motion3.local

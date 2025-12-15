@@ -10,6 +10,7 @@
 
 #define MAX_THING_NAME_LENGTH 16
 char thing_name[MAX_THING_NAME_LENGTH];
+char mqtt_topic[64];  // Buffer for topic + thing_name
 
 FsManager fsManager;
 MQTTManager mqttManager;
@@ -17,6 +18,8 @@ MQTTManager mqttManager;
 // GPIO pin used
 const int sensorPin = 13;
 int previousValue = -1;  // Track previous sensor value (-1 = uninitialized)
+unsigned long lastHeartbeat = 0;  // Track last heartbeat time
+const unsigned long heartbeatInterval = 5000;  // 5 seconds
 
 void setupOTA() {
     // Port defaults to 3232
@@ -105,6 +108,10 @@ void setup() {
     }
     Serial.print("Thing name: "); Serial.println(thing_name);
 
+    // Build MQTT topic with thing name
+    snprintf(mqtt_topic, sizeof(mqtt_topic), "%s/%s", MQTT_TOPIC_SENSORS, thing_name);
+    Serial.print("MQTT topic: "); Serial.println(mqtt_topic);
+
     // init sensor IO as input
     pinMode(sensorPin, INPUT_PULLDOWN);
 
@@ -116,16 +123,22 @@ void setup() {
     JsonDocument lwtDoc;
     lwtDoc["sensor"] = thing_name;
     lwtDoc["value"] = 0;
+    lwtDoc["alive"] = false;
     lwtDoc["timestamp"] = 0;
     char lwtMessage[256];
     serializeJson(lwtDoc, lwtMessage);
-    mqttManager.setLastWill(MQTT_TOPIC_SENSORS, lwtMessage, 0, true);
+    mqttManager.setLastWill(mqtt_topic, lwtMessage, 0, true);
 
     if (mqttManager.connect())
     {
         Serial.println("connected to MQTT broker");
-        String startupMsg = String("{\"message\":\"device started\",\"thing_name\":\"") + String(thing_name) + String("\"}");
-        mqttManager.sendJSON(MQTT_TOPIC_SENSORS, startupMsg.c_str());
+        JsonDocument startupDoc;
+        startupDoc["message"] = "device started";
+        startupDoc["thing_name"] = thing_name;
+        startupDoc["alive"] = true;
+        char startupMsg[256];
+        serializeJson(startupDoc, startupMsg);
+        mqttManager.sendJSON(mqtt_topic, startupMsg);
     }
     else
     {
@@ -149,16 +162,42 @@ void loop() {
     Serial.print(" Sensor value: ");
     Serial.println(value);
 
-    // check if value changed and send MQTT message
-    if (value != previousValue) {
-        Serial.println("Sensor value changed! Sending MQTT message...");
-        if (mqttManager.isConnected()) {
-        mqttManager.sendSensorValue(MQTT_TOPIC_SENSORS, thing_name, value);
+    // Send MQTT message if value changed OR if 5 seconds elapsed
+    bool valueChanged = (value != previousValue);
+    bool heartbeatDue = (millis() - lastHeartbeat >= heartbeatInterval);
+
+    // if (valueChanged || heartbeatDue) { // restore for heartbeat sending
+    if (valueChanged) {
+        if (valueChanged) {
+            Serial.println("Sensor value changed! Sending MQTT message...");
         } else {
-        Serial.println("MQTT not connected, attempting reconnect...");
-        if (mqttManager.reconnect()) {
-            mqttManager.sendSensorValue(MQTT_TOPIC_SENSORS, thing_name, value);
+            Serial.println("Heartbeat due. Sending MQTT message...");
         }
+
+        if (mqttManager.isConnected()) {
+            // Send message with alive=true
+            JsonDocument doc;
+            doc["sensor"] = thing_name;
+            doc["value"] = value;
+            doc["alive"] = true;
+            doc["timestamp"] = millis();
+            char jsonMsg[256];
+            serializeJson(doc, jsonMsg);
+            mqttManager.sendJSON(mqtt_topic, jsonMsg);
+            lastHeartbeat = millis();
+        } else {
+            Serial.println("MQTT not connected, attempting reconnect...");
+            if (mqttManager.reconnect()) {
+                JsonDocument doc;
+                doc["sensor"] = thing_name;
+                doc["value"] = value;
+                doc["alive"] = true;
+                doc["timestamp"] = millis();
+                char jsonMsg[256];
+                serializeJson(doc, jsonMsg);
+                mqttManager.sendJSON(mqtt_topic, jsonMsg);
+                lastHeartbeat = millis();
+            }
         }
         previousValue = value;
     }
